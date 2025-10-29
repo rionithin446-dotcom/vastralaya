@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Upload, Plus, X } from 'lucide-react';
+import { uploadAPI } from '../../services/api';
+import { Upload, Plus, X, ImagePlus } from 'lucide-react';
 
 const CATEGORIES = [
   'Saree',
@@ -25,14 +26,68 @@ export const ProductUpload: React.FC = () => {
     size_options: [''],
     color_options: [''],
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setError('Please select a valid image file');
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size must be less than 5MB');
+        return;
+      }
+
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      setError('');
+    }
+  };
+
+  const handleImageUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select an image first');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+
+    try {
+      const result = await uploadAPI.uploadRetailerImage(selectedFile);
+      setFormData({ ...formData, image_url: result.url });
+      setSuccess('Image uploaded successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError('Failed to upload image. Please try again.');
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (!formData.image_url) {
+      setError('Please upload an image before submitting');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -63,6 +118,8 @@ export const ProductUpload: React.FC = () => {
         size_options: [''],
         color_options: [''],
       });
+      setSelectedFile(null);
+      setImagePreview('');
     } catch (err) {
       setError('Failed to upload product. Please try again.');
       console.error(err);
@@ -170,16 +227,52 @@ export const ProductUpload: React.FC = () => {
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Image URL</label>
-          <input
-            type="url"
-            value={formData.image_url}
-            onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-            placeholder="https://example.com/image.jpg"
-            required
-          />
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Product Image</label>
+
+          <div className="space-y-4">
+            {imagePreview && (
+              <div className="relative w-full max-w-md mx-auto">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="w-full h-64 object-cover rounded-lg border-2 border-gray-300"
+                />
+                {formData.image_url && (
+                  <div className="absolute top-2 right-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                    Uploaded
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 items-center">
+              <div className="flex-1 w-full">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+                />
+              </div>
+
+              {selectedFile && !formData.image_url && (
+                <button
+                  type="button"
+                  onClick={handleImageUpload}
+                  disabled={uploading}
+                  className="flex items-center gap-2 px-6 py-2 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  <ImagePlus className="w-5 h-5" />
+                  {uploading ? 'Uploading...' : 'Upload Image'}
+                </button>
+              )}
+            </div>
+
+            <p className="text-sm text-gray-500">
+              Supported formats: JPEG, PNG, WebP. Maximum size: 5MB
+            </p>
+          </div>
         </div>
       </div>
 
